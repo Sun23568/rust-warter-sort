@@ -21,16 +21,15 @@ fn main() {
         input_for_bottle_rows.push(tmp_array);
     }
     println!("最终读取到的数据: {:?}", input_for_bottle_rows);
-    if check_array_valid(&input_for_bottle_rows) {
-        println!("数组合法, 开始计算...");
-    } else {
+    if !check_array_valid(&input_for_bottle_rows) {
         println!("数组不合法");
         return;
     }
+    println!("数组合法, 开始计算...");
 
     // 动态规划做DFS
     // 定义缓存
-    let mut cache: HashMap<Vec<Vec<i32>>, Option<Vec<String>>> = HashMap::new();
+    let mut cache: HashMap<Vec<Vec<i32>>, Option<Vec<Vec<usize>>>> = HashMap::new();
     // 定义答案
     // let mut answer: Vec<String> = Vec::new();
     let answer = calculate_answer(&input_for_bottle_rows, &mut cache);
@@ -55,30 +54,41 @@ fn check_array_valid(array: &Vec<Vec<i32>>) -> bool {
 // 计算
 fn calculate_answer(
     array: &Vec<Vec<i32>>,
-    cache: &mut HashMap<Vec<Vec<i32>>, Option<Vec<String>>>,
-) -> Option<Vec<String>> {
-    println!("DEBUG: 当前状态 = {:?}", array);
+    cache: &mut HashMap<Vec<Vec<i32>>, Option<Vec<Vec<usize>>>>,
+) -> Option<Vec<Vec<usize>>> {
     // 检查是否还存在未排序完成的瓶子
     if !check_if_still_have_unsorted_bottle(array) {
-        return None;
+        return Some(Vec::new());
     }
 
     // 查看缓存中是否有当前瓶子的结果
-    let mut sorted_array = array.clone();
-    sorted_array.sort();
-    if let Some(cached_result) = cache.get(&sorted_array) {
+    let sorted_array = array.clone();
+    // 生成(index, value)元组
+    let mut index_array: Vec<(usize, &Vec<i32>)> = sorted_array.iter().enumerate().collect();
+    // 对元组value进行排序
+    index_array.sort_by(|a, b| a.1.cmp(b.1));
+    // 取出index 和 value
+    let index_values: Vec<Vec<i32>> = index_array.iter().map(|x| x.1.clone()).collect();
+    let index_key: Vec<usize> = index_array.iter().map(|x| x.0).collect();
+    if let Some(cached_result) = cache.get(&index_values) {
         if cached_result.is_none() {
             return None;
         }
-        return cached_result.clone();
+        let result_tmp = cached_result.as_ref().unwrap();
+        return Some(
+            result_tmp
+                .iter()
+                .map(|x| vec![index_key[x[0]], index_key[x[1]]])
+                .collect(),
+        );
     }
 
     // 没有的话就先将当前状态加入缓存，防止死循环
-    cache.insert(sorted_array.clone(), None);
+    cache.insert(index_values.clone(), None);
 
     // 没有结果时进行计算，先获取此时有可能的移动方式
-    let possible_moves: Vec<Vec<i32>> = get_possible_moves(array);
-    let mut best_result: Option<Vec<String>> = None;
+    let possible_moves: Vec<Vec<usize>> = get_possible_moves(array);
+    let mut best_result: Option<Vec<Vec<usize>>> = None;
     // 遍历所有方式，进行计算
     for move_ in possible_moves {
         let new_array: Vec<Vec<i32>> = move_warter(array.clone(), &move_);
@@ -86,14 +96,32 @@ fn calculate_answer(
         if let Some(res) = _result {
             if best_result.is_none() || res.len() < best_result.as_ref().unwrap().len() {
                 best_result = Some(res);
-                best_result.as_mut().unwrap().insert(0, format!("{} {}", move_[0], move_[1]));
+                best_result
+                    .as_mut()
+                    .unwrap()
+                    .insert(0, vec![move_[0], move_[1]]);
             }
-        }else {
-            best_result = Some(vec![format!("{} {}", move_[0], move_[1])]);
         }
     }
-    // 塞入缓存
-    cache.insert(sorted_array, best_result.clone());
+    if best_result.is_none() {
+        cache.insert(index_values, None);
+        return None;
+    }
+    // 1:将key转换回来
+    let need_cache_key: Vec<Vec<usize>> = best_result
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|x| {
+            vec![
+                // 去 index_values 里找 x[0] (比如2) 在哪 -> 返回 0
+                index_key.iter().position(|&v| v == x[0]).unwrap(),
+                // 去 index_values 里找 x[1] (比如1) 在哪 -> 返回 2
+                index_key.iter().position(|&v| v == x[1]).unwrap(),
+            ]
+        })
+        .collect();
+    cache.insert(index_values, Some(need_cache_key));
     best_result
 }
 
@@ -111,8 +139,8 @@ fn check_if_still_have_unsorted_bottle(array: &Vec<Vec<i32>>) -> bool {
 }
 
 // 获取可能的移动方式
-fn get_possible_moves(array: &Vec<Vec<i32>>) -> Vec<Vec<i32>> {
-    let mut possible_moves: Vec<Vec<i32>> = Vec::new();
+fn get_possible_moves(array: &Vec<Vec<i32>>) -> Vec<Vec<usize>> {
+    let mut possible_moves: Vec<Vec<usize>> = Vec::new();
     for m in 0..array.len() {
         // 已经为空时直接跳过
         let m_array = &array[m];
@@ -131,8 +159,7 @@ fn get_possible_moves(array: &Vec<Vec<i32>>) -> Vec<Vec<i32>> {
                     == n_array[get_last_color_index(&n_array)]
                     || n_array[n_array.len() - 1] == 0)
             {
-                possible_moves.push(vec![m as i32, n as i32]);
-                println!("插入： {} {} ", m, n)
+                possible_moves.push(vec![m, n]);
             }
         }
     }
@@ -150,9 +177,9 @@ fn get_last_color_index(array: &Vec<i32>) -> usize {
 }
 
 // 移动水
-fn move_warter(mut array: Vec<Vec<i32>>, move_: &Vec<i32>) -> Vec<Vec<i32>> {
-    let from_index = move_[0] as usize;
-    let to_index = move_[1] as usize;
+fn move_warter(mut array: Vec<Vec<i32>>, move_: &Vec<usize>) -> Vec<Vec<i32>> {
+    let from_index = move_[0];
+    let to_index = move_[1];
     // 计算移动水量
     let mut move_warter_count = 0;
     // 标识当前水颜色
