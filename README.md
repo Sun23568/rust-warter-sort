@@ -12,8 +12,7 @@
 
 程序启动后，按行输入瓶子状态（数字代表颜色，0 代表空位，从瓶口到瓶底排列）。输入一个空行结束输入并开始计算。
 
-![Uploading aac06a37517d816a25bacd0122aaf685.jpg…]()
-
+<img width="916" height="2036" alt="image" src="https://github.com/user-attachments/assets/c231bbc3-c838-4776-af15-6c8ceea02bb8" />
 
 **文本参考：**
 
